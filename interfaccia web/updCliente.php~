@@ -1,0 +1,333 @@
+ <?php
+require_once "pack/connessione.php" ;
+require_once "pack/validazione.php" ;
+
+session_start();
+
+$avvisi = ""; // raccolgo gli eventuali errori da recapitare all'utente
+$isAvvisi = FALSE;
+$isErrore = FALSE;
+
+// Controllo che l'utente sia loggato e abbia i provilegi per accedere a questa pagina(admin)
+if((!(isset($_SESSION['loggedIn'])))||($_SESSION['loggedIn'] != 'youAreLogged')||($_SESSION['gruppo_U']!=1))
+	header("Location: index.php?errore=noadmin");
+
+if(isset($_POST['modC'])){
+	
+	$isAvvisi = TRUE; // Quando invio una richiesta e' sempre TRUE, cioe' viene sempre visualizzato l'esito, contrariamente a quando accedo per la prima volta alla pagina
+	
+	if(!validateNome("nomeC", "nome cliente", false, $avvisi))
+		$isErrore = true;
+	
+	if(!validateNome("cognomeC", "cognome cliente", false, $avvisi))
+		$isErrore = true;
+		
+	if(!validateMail("emailC", "mail cliente", false, $avvisi))
+		$isErrore = true;
+		
+	if(!validateText("userC", "username cliente", 4, false, $avvisi))
+		$isErrore = true;
+		
+	if(!validateText("indirizzoC", "indirizzo cliente", 0, false, $avvisi))
+		$isErrore = true;
+	
+	if(!validateCAP("capC", "CAP cliente", false, $avvisi))
+		$isErrore = true;
+		
+	if(!validateNome("comuneC", "comune cliente", false, $avvisi))
+		$isErrore = true;
+	
+	if(!validateProv("provC", "provincia cliente", false, $avvisi))
+		$isErrore = true;
+		
+	if(!validateTEL("celC", "cellulare cliente", false, $avvisi))
+		$isErrore = true;
+		
+	if(!validateText("pwdC", "password cliente", 4, true, $avvisi))
+		$isErrore = true;
+	
+	if(!validateText("ripPwdC", "ripeti password cliente", 4, true, $avvisi))
+		$isErrore = true;
+		
+	
+	if(($_POST['pwdC']!="")&&($_POST['ripPwdC']==""))
+			{
+			$isErrore = true;
+			$avvisi .= "Password e password ripetuta non coincidono<br />";
+			}
+		
+	if(($_POST['pwdC']=="")&&($_POST['ripPwdC']!=""))
+			{
+			$isErrore = true;
+			$avvisi .= "Il campo password è vuoto!<br />";
+			}
+	
+		
+	if(($_POST['pwdC']!="")&&($_POST['ripPwdC']!="")){
+			
+			$pswCif = md5(sha1($_POST['pwdC']));
+			$ripPswCif = md5(sha1($_POST['ripPwdC']));
+			
+			if ($pswCif != $ripPswCif) {
+				$isErrore = true;
+				$avvisi .= "Password e password ripetuta non coincidono<br />";
+			}
+	}
+	
+
+	if(!$isErrore){
+		
+		try{
+			//Modifico i dati
+			if (!($stmt = $mysqli->prepare("CALL updCliente (?,?,?,?,?,?,?,?,?,?,@ris,@tipoErrore);")))
+				throw new Exception ('CALL fallita: (' . $mysqli->errno . ') ' . $mysqli->error);   
+			   
+			if (!($stmt->bind_param("isssssssss", $_POST['idC'], $_POST['userC'], $_POST['nomeC'], $_POST['cognomeC'],  $_POST['emailC'], $_POST['indirizzoC'], $_POST['comuneC'], $_POST['provC'], $_POST['capC'], $_POST['celC'])))
+				throw new Exception ('bind_param fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+		
+		$stmt->execute(); // Errore previsto e gestito direttamente da php
+				
+			if (!($stmt = $mysqli->prepare("SELECT @ris, @tipoErrore;")))
+				throw new Exception ('prepare fallita: (' . $mysqli->errno . ') ' . $mysqli->error);  
+		
+			if (!($stmt->execute()))
+				throw new Exception ('execute fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+				 
+			if (!($stmt->bind_result($risultato, $tipoErrore)))
+				throw new Exception ('bind_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);  
+			
+			if (!($stmt->fetch()))
+				throw new Exception ('fetch fallita: (' . $mysqli->errno . ') ' . $mysqli->error); 	
+						
+			
+			if (!($stmt->close()))   
+				throw new Exception ('chiusura oggetto risultato fallito: (' . $mysqli->errno . ') ' . $mysqli->error);
+
+		}catch (Exception $excp) {
+   			echo $excp -> getMessage();
+		}
+		
+		if($pswCif) {
+			try{
+//Modifico la password solo se il campo non è stato lasciato vuoto
+				if (!($stmt = $mysqli->prepare("UPDATE CLIENTI SET passwordCliente = ? WHERE idCliente = ?;")))
+					throw new Exception ('UPDATE fallita: (' . $mysqli->errno . ') ' . $mysqli->error);   
+		   
+				if (!($stmt->bind_param("si", $pswCif, $_POST['idC'])))
+					throw new Exception ('bind_param fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+	
+				if (!($stmt->execute())) 
+					throw new Exception ('execute fallito: (' . $mysqli->errno . ') ' . $mysqli->error); 
+		
+				if (!($stmt->close()))   
+					throw new Exception ('chiusura oggetto risultato fallito: (' . $mysqli->errno . ') ' . $mysqli->error);
+
+			}catch (Exception $excp) {
+				echo $excp -> getMessage();
+			}
+		}
+	}
+		
+	$isAvvisi = TRUE;
+	if($risultato){
+		$avvisi = "Modifica del Cliente riuscita!";
+	}else{
+		$avvisi .= $tipoErrore;
+	}
+}			
+			
+
+// Se la pagina e' stata richiesta dal form di modifica di un utente, processo la richiesta
+if(isset($_GET['mod'])){ 
+	$var = $_GET['mod'];
+	try{
+		//Seleziono informazioni cliente
+		if (!($stmt = $mysqli->prepare("SELECT idCliente, userCliente, nomeCliente, cognomeCliente, mailCliente, indirizzoCliente, comuneCliente, provCliente, capCliente, 						      		cellCliente FROM CLIENTI WHERE idCliente=?;")))
+			throw new Exception ('SELECT fallita: (' . $mysqli->errno . ') ' . $mysqli->error);   
+		
+	if (!($stmt->bind_param("i", $var)))
+		throw new Exception ('bind_param fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+		
+	if (!($stmt->execute()))
+		throw new Exception ('execute fallita: (' . $mysqli->errno . ') ' . $mysqli->error);		  
+				 
+	if (!($stmt->bind_result($_POST['idC'], $_POST['userC'], $_POST['nomeC'], $_POST['cognomeC'], $_POST['emailC'], $_POST['indirizzoC'], $_POST['comuneC'], $_POST['provC'], $_POST['capC'], $_POST['celC']
+	)))
+		throw new Exception ('bind_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+			
+	if (!($stmt->fetch()))
+		throw new Exception ('fetch fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+			
+	if (!($stmt->close()))   
+		throw new Exception ('chiusura oggetto risultato fallito: (' . $mysqli->errno . ') ' . $mysqli->error);
+
+}catch (Exception $excp) {
+    echo $excp -> getMessage();
+}
+
+	
+}
+
+// Interazione col DB terminata. Chiudo la connessione
+$mysqli->close();
+
+// Se la pagina e' stata richiesta dal link di Logout, eseguo il logout dell'utente connesso
+if(isset($_GET['logout']) && $_GET['logout']==true){
+	session_destroy();
+	
+	header("Location: ".$_SERVER['PHP_SELF']);  // valido per tutte le pagine: posso fare copia incolla :)
+}
+?>
+
+
+<html>
+<head>
+<meta charset="UTF-8">
+<title>The CakeLab - Modifica Cliente</title>
+<link href="main.css" rel="stylesheet" type="text/css">
+</head>
+<body>
+<div id="top">
+	<div id="CakeLabLogo"><img src="media/logo.png" width="220px" height="86" alt="CakeLab Logo" /></div>
+	<div id="menuTop">
+    	<div id="home" class="pulsanteTop"><a href="index.php">Home</a></div>
+        <?php
+        if(!(isset($_SESSION['loggedIn']))){ // Se non e' loggato nessun utente permetto ad un eventuale cliente di registrarsi
+		?>
+    	<div id="nuovoUtente" class="pulsanteTop"><a href="addCliente.php">Sono Nuovo</a></div>
+        <?php
+		}else if(($_SESSION['loggedIn'] == 'youAreLogged')&&($_SESSION['gruppo_U']==1)){ // se invece e' loggato un admin gli permetto di creare un nuovo utente, ma con parole diverse :)
+		?>
+        <div id="nuovoUtente" class="pulsanteTop"><a href="addCliente.php">Nuovo Cliente</a></div>
+        <?php	
+		} // chiusura if-else nessun utente loggato/loggato un admin
+		
+		if((isset($_SESSION['loggedIn']))&&($_SESSION['loggedIn'] == 'youAreLogged')&&($_SESSION['gruppo_U']==1)){ // E' loggato un admin: solo un admin puo' aggiungere altri admin
+		?>
+        <div id="nuovoAdmin" class="pulsanteTop"><a href="addAdmin.php">Nuovo Admin</a></div>
+        <?php
+		}
+		?>
+    </div>
+	<div id="login">
+    	<?php
+		if((isset($_SESSION['loggedIn']))&&($_SESSION['loggedIn'] == 'youAreLogged')) // L'utente è gia' loggato
+		{
+				
+		?>
+        <div id="loggedBox">Benvenuto <span class="dato"><?php echo $_SESSION['nome_U'];?></span>(<a class="pulsanteLoggedBox" href="index.php?logout=true">Logout</a>) <hr />
+            <div id="iltuoCakeLab">
+        	<?php
+			if($_SESSION['gruppo_U']==1){ // L'utente loggato e' un admin
+			?>
+            	<a class="pulsanteLoggedBox" href="getUtenti.php">Gestisci Utenti</a>
+            <?php
+			}else{  // L'utente loggato e' un cliente
+			?>
+        		<a class="pulsanteLoggedBox" href="getOrdini.php">I tuoi ordini</a>
+            <?php
+            }// chiusura if-else utente loggato admin/cliente
+        	?>
+            </div>
+        	<div id="carrello">
+            <?php
+			if($_SESSION['gruppo_U']==1){ // L'utente loggato e' un admin
+			?>
+        		<a class="pulsanteLoggedBox" href="">Gestisci prodotti</a>
+        	<?php
+			}else{  // L'utente loggato e' un cliente
+			?>
+            	<img width="16px" height="16px" src="media/carrello.gif" alt="un piccolo carrello" /><a class="pulsanteLoggedBox" href="">Carrello</a>   	
+            <?php
+            }// chiusura if-else utente loggato admin/cliente
+        	?>
+            </div>
+        </div>
+        <?php
+			}else{  // L'utente non e' loggato
+		 ?>
+   				<form method="POST" action="<?php echo $_SERVER['PHP_SELF']; /*L'invio del form sara' processato da questa stessa pagina*/?>">
+    				<div id="logTextFields">
+  						Username: <input type="text" name="user" size="15" /><br />
+ 						Password:&nbsp; <input type="password" name="pwd" size="15" /><br />
+                        <?php
+							if($erroreLogin){
+						?>
+                        		<div class="errore"><?php echo $descErrore;?></div>
+                        <?php
+							}// errore campi login mancanti
+						?>
+ 					</div>
+     				<div id="logPulsante">
+   						<input type="submit" name="Login" value="Login" />
+  					</div>
+				</form>
+                
+    
+   		 
+    
+  	    <?php	
+			}// chiusura if-else utente loggato/non loggato
+		?>
+    </div>
+</div>
+<div id="center">
+<?php  
+if($isAvvisi){
+?>
+<div class="risultato">
+<?php echo $avvisi;?>
+</div>
+<?php
+}
+?>
+<!-- CONTENUTO VARIABILE -->
+<div class="form">
+
+<form method="POST" action="<?php echo $_SERVER['PHP_SELF'];?>">
+<fieldset>
+  	<legend>Modifica i dati dell'utente</legend>
+    
+  <fieldset>
+  	<legend>Contatto</legend>
+    <div><label for="nomeC">Nome: </label>
+    <input class="mainForm" type="text" id="nomeC" name="nomeC" size="10" maxlength="255" value="<?php echo $_POST['nomeC'];?>"></div>
+    <div><label for="cognomeC">Cognome: </label>
+    <input class="mainForm" type="text" id="cognomeC" name="cognomeC" size="10" maxlength="255" value="<?php echo $_POST['cognomeC'];?>"></div>
+    <div><label for="emailC">e-Mail: </label>
+    <input class="mainForm" type="text" id="emailC" name="emailC" size="10" maxlength="255" value="<?php echo $_POST['emailC'];?>"></div>
+  </fieldset>
+  
+  <fieldset>
+    <legend>Info di Accesso</legend> 
+    <div><label for="userC">Username: </label>
+    <input class="mainForm" type="text" id="userC" name="userC" size="10" maxlength="255" value="<?php echo $_POST['userC'];?>"></div>
+    <div><label for="pwdC">Password(vuoto = mantieni precedente): </label>
+    <input class="mainForm" type="password" id="pwdC" name="pwdC" size="10" maxlength="255"></div>
+    <div><label for="ripPwdC">Ripeti Password: </label>
+    <input class="mainForm" type="password" id="ripPwdC" name="ripPwdC" size="10" maxlength="255"></div>
+   </fieldset>
+   
+   <fieldset>
+    <legend>Anagrafica</legend> 
+    <div><label for="indirizzoC">Indirizzo: </label>
+    <input class="mainForm" type="text" id="indirizzoC" name="indirizzoC" size="10" maxlength="255" value="<?php echo $_POST['indirizzoC'];?>"></div>
+    <div><label for="capC">CAP: </label>
+    <input class="mainForm" type="text" id="capC" name="capC" size="10" maxlength="5" value="<?php echo $_POST['capC'];?>"></div>
+    <div><label for="comuneC">Comune: </label>
+    <input class="mainForm" type="text" id="comuneC" name="comuneC" size="10" maxlength="255" value="<?php echo $_POST['comuneC'];?>"></div>
+    <div><label for="provC">Provincia: </label>
+    <input class="mainForm" type="text" id="provC" name="provC" size="10" maxlength="2" value="<?php echo $_POST['provC'];?>"></div>
+    <div><label for="celC">Cellulare: </label>
+    <input class="mainForm" type="text" id="celC" name="celC" size="10" maxlength="255" value="<?php echo $_POST['celC'];?>">
+    <input class="mainForm" type="hidden" id="idC" name="idC" size="10" maxlength="255" value="<?php echo $_POST['idC'];?>"></div>
+   </fieldset> 
+ 
+    <button type="submit" id="modC" name="modC" value="Modifica Cliente">Modifica Cliente</button>
+    
+</fieldset>
+</form>
+</div> <!-- Chiusura div id='form' -->
+</div> <!-- Chiusura div id='center' -->
+</body>
+</html>

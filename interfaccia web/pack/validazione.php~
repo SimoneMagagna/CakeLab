@@ -1,0 +1,423 @@
+<?php
+/*
+Funzioni per la validazione dei form. 
+File incluso in ogni pagina che richieda la validazione di form.
+*/
+
+/*
+Funzione per la validazione di un campo indirizzo email
+*/
+
+function isMail($item){
+   return preg_match("/^([a-z0-9_-])+([\.a-z0-9_-])*@([a-z0-9-])+(\.[a-z0-9-]+)*\.([a-z]{2,6})$/", $item);
+}//isMail
+
+/*
+Funzione per la validazione di lettere(se i caratteri non sono tutte lettere restituisce errore)
+*/
+
+function validateAlpha($item, $descCampo, &$descErrore){
+	$errore=false;	
+	$pezzi = explode(" ", $item);
+	foreach($pezzi as $pezzo){
+		if($errOcc==0 && !$errore){
+			if(!(ctype_alpha($pezzo))){
+				$errore = true;
+				$descErrore .= "Il campo $descCampo non e' testuale<br />";
+	  		}//if
+		}//if
+	}
+	
+	if(!$errore)
+		return true;
+	else
+		return false;
+	   
+}//validateAlpha
+
+/*
+Funzione per la validazione di cifre numeriche(se i caratteri non sono tutte cifre restituisce errore)
+*/
+
+function validateDigits($item, $descCampo, &$descErrore){
+    $errore=false;
+    if(!(ctype_digit($item))){
+		$errore = true;
+	    $descErrore .= "Il campo $descCampo non e' numerico";
+	}//if
+   
+	
+   if(!$errore)
+       return true;
+   else{
+   	   $descErrore .="<br />";
+	   return false;
+   }
+   
+}//validateDigits
+
+/*
+Funzione per la validazione di un input text
+
+Il parametro $tipoTesto vale
+
+0 -> l'input text e' un nome
+1 -> l'input text va salvato minuscolo
+2 -> l'input text va salvato maiuscolo
+3 -> l'input text va mantenuto originale
+*/
+
+function validateText($nomeCampo, $descCampo, $tipoTesto, $isFacoltativo, &$descErrore){
+  
+      $errore=false;
+      
+	  if((!(isset($_POST[$nomeCampo])))&&((isset($_GET[$nomeCampo]))))  // rende la funzione cross-method
+         $_POST[$nomeCampo] = $_GET[$nomeCampo];
+     
+      if(isset($_POST[$nomeCampo])){
+         $item = trim($_POST[$nomeCampo]);
+	  	 
+         
+         if($item!=""){
+
+	            $item = strip_tags($item);  //pulisco completamente la stringa da tags HTML
+			    // Pulisco il dateSDoc dai caratteri pericolosi
+			    $item = str_replace("'", "´", $item);
+			    if (strpos($item, "=") !== false) {
+				   $item = str_replace("=", "", $item);
+                   $errore = true;
+				   $descErrore .= "Il campo $descCampo contiene il carattere non ammesso \"=\"<br />";
+			    }//if
+                if (strpos($item, "?") !== false) {
+                   $item = str_replace("?", "", $item);
+                   $errore = true;
+				   $descErrore .= "Il campo $descCampo contiene il carattere non ammesso \"?\"<br />";
+			    }//if
+			    if (strpos($item, "#") !== false) {
+				   $item = str_replace("#", "", $item);
+                   $errore = true;
+				   $descErrore .= "Il campo $descCampo contiene il carattere non ammesso \"#\"<br />";
+			    }//if
+			
+		       
+			   if($tipoTesto == 0){
+				   $item = strtolower($item);
+                   $item = ucwords($item);
+			   }//if
+			   
+			   if($tipoTesto == 1){
+			       $item = strtolower($item);
+			   }//if
+			   
+			   if($tipoTesto == 2){
+				   $item = strtoupper($item);
+			   }//if
+			   
+			   $_POST[$nomeCampo] = $item;
+			   
+	     }else{  // NON è stato indicato ma ...
+		    if($isFacoltativo==false){
+	          	 $errore = true;
+			     $descErrore .= "Il campo $descCampo e' obbligatorio<br />";
+			}
+         }//else if
+      }//else-if
+	  
+   if(!$errore)
+       return true;
+   else{
+	   return false;
+   }
+   
+}//validateText
+
+/*
+Funzione per la validazione di CAP
+*/
+
+function validateCAP($nomeCampo, $descCampo, $isFacoltativo, &$descErrore){
+    $errore=false;
+	
+	if(!validateText($nomeCampo, $descCampo, 2, $isFacoltativo, $descErrore))
+    {
+	   $errore = true;
+    }
+	
+	$item = $_POST[$nomeCampo];
+	
+	if($item!=""){
+	   if(!validateDigits($item, $descCampo, $descErrore))
+	   {
+		   $errore = true;
+	   }
+	   $lung = strlen ($item);
+       if($lung!=5){
+		   $errore = true;
+	       $descErrore .= "Il campo $descCampo deve essere di esattamente 5 cifre<br />";
+	   }
+	}//if
+	
+   if(!$errore)
+       return true;
+   else
+	   return false;
+  
+   
+}//validateCAP
+
+/*
+Funzione per la validazione di Province
+*/
+
+function validateProv($nomeCampo, $descCampo, $isFacoltativo, &$descErrore){
+
+	$errore=false;
+	
+	if(!validateText($nomeCampo, $descCampo, 2, $isFacoltativo, $descErrore))
+    {
+	   $errore = true;
+    }
+	
+	$item = $_POST[$nomeCampo];
+	
+	if($item!=""){
+	   if(!validateAlpha($item, $descCampo, $descErrore))
+	   {
+		   $errore = true;
+	   }
+	   $lung = strlen ($item);
+       if($lung!=2){
+		   $errore = true;
+	       $descErrore .= "Il campo $descCampo deve essere di esattamente 2 caratteri<br />";
+	   }
+	}//if
+	
+   if(!$errore)
+       return true;
+   else
+	   return false;
+   
+}//validateProv
+
+/*
+Funzione per la validazione di Numeri di Telefono
+*/
+
+function validateTEL($nomeCampo, $descCampo, $isFacoltativo, &$descErrore){
+	
+	$errore=false;
+	
+	if(!validateText($nomeCampo, $descCampo, 2, $isFacoltativo, $descErrore))
+    {
+	   $errore = true;
+    }
+
+    $item = $_POST[$nomeCampo];
+	
+	$item = str_replace("/", "", $item);
+	$item = str_replace(" ", "", $item);
+	$item = str_replace("-", "", $item);
+	$item = str_replace(".", "", $item);
+	
+	if($item!=""){
+       if(!validateDigits($item, $descCampo, $descErrore))
+	   		$errore = true;
+	}//if
+	
+   if(!$errore)
+       return true;
+   else
+	   return false;
+   
+}//validateTEL
+
+/*
+Funzione per la validazione di ID e campi numerici interi positivi
+*/
+
+function validateID($nomeCampo, $descCampo, $isFacoltativo, &$descErrore){
+  
+      $errore=false;
+      
+	  if((!(isset($_POST[$nomeCampo])))&&((isset($_GET[$nomeCampo]))))  // rende la funzione cross-method
+         $_POST[$nomeCampo] = $_GET[$nomeCampo];
+     
+      if(isset($_POST[$nomeCampo])){
+         $item = trim($_POST[$nomeCampo]);
+	  	 
+         
+         if($item!=""){
+
+	            $item = strip_tags($item);  //pulisco completamente la stringa da tags HTML
+			    // Pulisco dai caratteri pericolosi
+			    $item = str_replace("'", "´", $item);
+			    if (strpos($item, "=") !== false) {
+				   $item = str_replace("=", "", $item);
+                   $errore = true;
+				   $descErrore .= "Il campo $descCampo contiene il carattere non ammesso \"=\"<br />";
+			    }//if
+                if (strpos($item, "?") !== false) {
+                   $item = str_replace("?", "", $item);
+                   $errore = true;
+				   $descErrore .= "Il campo $descCampo contiene il carattere non ammesso \"?\"<br />";
+			    }//if
+			    if (strpos($item, "#") !== false) {
+				   $item = str_replace("#", "", $item);
+                   $errore = true;
+				   $descErrore .= "Il campo $descCampo contiene il carattere non ammesso \"#\"<br />";
+			    }//if
+			
+		       
+			   if($item!=""){
+       		   		if(!validateDigits($item, $descCampo, $descErrore))
+	   				$errore = true;
+		       }//if
+			   
+			   if($item < 0){
+				   $errore = true;
+				   $descErrore .= "Il campo $descCampo non puo' essere negativo<br />";
+			   }
+			   
+			   $_POST[$nomeCampo] = $item;
+			   
+	     }else{  // NON è stato indicato ma ...
+		    if($isFacoltativo==false){
+	          	 $errore = true;
+			     $descErrore .= "Il campo $descCampo e' obbligatorio<br />";
+			}
+         }//else if
+      }//else-if
+	  
+   if(!$errore)
+       return true;
+   else{
+	   return false;
+   }
+   
+}//validateID
+
+/*
+Funzione per la validazione di importi 
+Dopo la validazione formatta l'importo trasformando la virgola in punto per la scrittura su DB
+*/
+
+function validateImporto($nomeCampo, $descCampo, $isFacoltativo, $isZero, &$descErrore){
+  
+      $errore=FALSE;
+      
+	  if((!(isset($_POST[$nomeCampo])))&&((isset($_GET[$nomeCampo]))))  // rende la funzione cross-method
+         $_POST[$nomeCampo] = $_GET[$nomeCampo];
+     
+      if(isset($_POST[$nomeCampo])){
+         $item = trim($_POST[$nomeCampo]);
+	  	 
+         
+         if($item!=""){
+
+	           if(!(preg_match("#^[0-9]{1,3}\,[0-9]{2}$#", $item))){
+				   $errore = TRUE;
+				   $descErrore .= "Il campo $descCampo non e' nel formato [0-9]{1,3},[0-9]{2}<br />";
+			   }
+			   
+			   if((!($isZero)) && ($item == 0)){ // un importo che non poteva essere nullo e' risultato nullo
+			   	   $errore = true;
+				   $descErrore .= "Il campo $descCampo non puo' essere nullo";
+			   }
+			   
+			   if(!($errore))
+			   	   $item = str_replace(",", ".", $item);  // formatto il campo per la scrittura su DB
+			   
+			   $_POST[$nomeCampo] = $item;
+			   
+	     }else{  // NON è stato indicato ma ...
+		    if($isFacoltativo==false){
+	          	 $errore = true;
+			     $descErrore .= "Il campo $descCampo e' obbligatorio<br />";
+			}
+         }//else if
+      }//else-if
+	  
+   if(!$errore)
+       return true;
+   else{
+	   return false;
+   }
+   
+}//validateID
+
+/*
+Funzione per la validazione di indirizzi mail
+*/
+
+function validateMail($nomeCampo, $descCampo, $isFacoltativo, &$descErrore){
+   $errore=false;
+
+   if(!validateText($nomeCampo, $descCampo, 1, $isFacoltativo, $descErrore))
+   {
+	   $errore = true;
+   }
+   
+   $item = $_POST[$nomeCampo];
+   
+   if($item!=""){
+       if(!(isMail($item))){
+            $errore = true;
+	        $descErrore .= "Il campo $descCampo non e' un indirizzo email valido<br />";
+       }
+   }//if
+   
+   
+   if(!$errore)
+       return true;
+   else{
+	   return false;
+   }
+   
+}//validateMail
+
+/*
+Funzione per la validazione di indirizzi mail
+*/
+
+function validateNome($nomeCampo, $descCampo, $isFacoltativo, &$descErrore){
+   $errore=false;
+
+   if(!validateText($nomeCampo, $descCampo, 0, $isFacoltativo, $descErrore))
+   {
+	   $errore = true;
+   }
+   
+   $item = $_POST[$nomeCampo];
+   
+   if($item!=""){
+       if(!validateAlpha($item, $descCampo, $descErrore))
+	   		$errore = true;
+	}//if
+   
+   
+   if(!$errore)
+       return true;
+   else
+	   return false;
+   
+}//validateNome
+
+
+function formattaImporto(&$prezzo){
+	$prezzo = sprintf('%0.2f', $prezzo);
+	$prezzo = str_replace(".", ",", $prezzo);
+	$prezzo = "€ ".$prezzo;
+}
+
+// Converte una data dal formato ENG a quello ITA
+function dateToIT($engDate, $separatore="/"){
+   $giornoDate = substr($engDate, 8, 2);
+   $meseDate = substr($engDate, 5, 2);
+   $annoDate = substr($engDate, 0, 4);
+   
+   $hDate = substr($engDate, 11, 2);
+   $minDate = substr($engDate, 14, 2);
+   return $giornoDate.$separatore.$meseDate.$separatore.$annoDate." alle ".$hDate.".".$minDate;
+}//dateToIT
+
+?>

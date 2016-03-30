@@ -1,0 +1,248 @@
+body {
+ background: #CCC;
+ color: black;
+}
+
+hr {
+	border: none;
+	border-top: 1px dashed black;
+}
+
+.pair  {
+	background-color:#999;
+}
+
+form {
+	margin-bottom: 0px;
+}
+
+.form  {
+	padding: 20px;
+}
+
+.fotoProdotto {
+	float: left;
+	margin-left: 40px;
+}
+
+.datiProdotto {
+	float: left;	
+	margin-left: 40px;
+}
+
+.descrizioneProdotto {
+	width: 655px;
+	float: right;	
+}
+
+.listaProdotti{
+	width: 600px;
+	float: left;	
+}
+
+.infoOrd {
+	float: left;	
+}
+
+.risultato {
+	padding: 20px;
+	margin: 20px;
+	background: #FF6;
+	border: 2px dashed #F93; 
+	border-radius: 10px;
+}
+
+form .mainForm { 
+	width: 250px;
+	border-radius: 5px;
+}
+
+form .mainRicerca { 
+	border-radius: 5px;
+}
+
+legend {
+	color:#000;
+	*margin-left:-7px; /* Serve per posizionare i titoli con allineamento cross-browser. Letto solo da IE */
+}
+
+fieldset {
+	border:2px dashed #999; 
+	border-bottom-left-radius: 10px;
+	border-top-right-radius: 10px;
+	border-bottom-right-radius: 10px;
+}
+
+label {
+	float:left; /* allineo tutte le etichette e do loro la stessa lunghezza, cosi' che anche gli input text risultino allineati */
+	width:640px; 
+}
+
+.etichettaVicina {
+	float:left; /* allineo tutte le etichette e do loro la stessa lunghezza, cosi' che anche gli input text risultino allineati */
+	width:auto; 
+}
+
+table {
+    border-collapse: collapse;
+	width: 100%;
+}
+
+table, th, td {
+    border: 1px solid black;
+}
+
+#top {
+	position:relative;
+	width: 1000px; 
+	height: 90px;
+	border: 2px solid #999;
+	border-top-left-radius: 25px;
+	border-top-right-radius: 25px;
+	padding-left: 2px; /* il padding crea spazio all'interno del box, il margin all'esterno */
+	padding-top: 2px;
+	padding-right: 2px;
+	margin: auto;	
+}
+
+#CakeLabLogo {   /* #(number) seleziona un id, .(punto) seleziona una classe */
+	position:relative;
+    float: left;
+	width: 220px; 
+	height: 86px;
+	vertical-align: middle;  /* questa proprieta' insieme a line-height determinano l'allineamento verticale della riga */
+    line-height: 86px;
+	margin-left: 20px;
+}
+
+#menuTop {  
+	position:relative;
+    float: left;
+	width: 300px; 
+	height: 86px;
+	vertical-align: middle;
+    line-height: 86px;
+	margin-left: 70px;
+}
+
+#home {
+	float: left;
+}
+
+#nuovoUtente {
+	float: left;
+}
+
+#nuovoAdmin {
+	float: right;
+}
+
+.pulsanteTop {
+	position:relative;
+	width: 95px;
+	height: 20px;
+}
+
+#login {
+	position:relative;
+    float: right;
+	width: 300px; 
+	height: 86px;
+	background:#999;
+	border: 2px dashed #000;
+	border-top-right-radius: 25px;
+}
+
+#logTextFields {
+	float: left;
+	padding-left: 30px;
+	padding-top: 22px;
+}
+
+#logPulsante {
+	float: left;
+	padding-left: 5px;
+	padding-top: 34px;
+}
+
+#loggedBox {
+	padding: 15px;
+	/*padding-left: 25px;*/
+}
+
+.dato {
+	color: blue;
+}
+
+#iltuoCakeLab {
+	float: left;
+}
+
+#carrello {
+	float: right;
+}
+
+.errore {
+	color: #F00;
+}
+
+#center {
+	width: 1000px; 
+	height: 600px;
+	border-left: 2px solid #999;
+	border-right: 2px solid #999;
+	border-bottom: 2px solid #999;
+	border-bottom-left-radius: 25px;
+	border-bottom-right-radius: 25px;
+	padding-left: 2px;
+	padding-top: 10px;
+	padding-right: 2px;
+	margin: auto;
+}
+
+.visualizza {
+	margin: 20px;
+}
+
+#barraRicerca {
+	width: 952px;
+	border: 2px dashed black;
+	border-radius: 10px;
+	background-color: #999;
+	margin: auto;
+	padding-left: 22px;
+}
+
+/* link mai visitato e gia' visitato */
+a, a:link, a:visited {
+	text-decoration: none;
+	color: #000;
+	border-bottom: 1px dashed;
+}
+
+/* mouse click */
+a:active {
+	border-color: orange;
+}
+
+/* mouse over */
+a:hover {
+	background-color: #999;
+}
+
+a.pulsanteLoggedBox {
+	text-decoration: none;
+	border-bottom: 1px dashed;
+}
+
+a.pulsanteLoggedBox:hover {
+	background-color: #ccc;
+}
+
+a.operazione:hover {
+	background-color: #F00;
+}
+
+input:focus { 
+	border-color:orange;
+}

@@ -1,0 +1,664 @@
+// se acceduta da un cliente ritorna i suoi ordini (se fatti). Se acceduta da un admin ritorna gli ordini fatti da tutti i clienti.
+<?php
+
+require_once "pack/setup.php" ;
+require_once "pack/connessione.php" ;
+require_once "pack/validazione.php" ;
+require_once "pack/calcolaPaginazione.php" ;
+
+session_start();
+
+$avvisi = ""; // raccolgo gli eventuali errori da recapitare all'utente
+$isAvvisi = FALSE;
+
+// Controllo che l'utente sia loggato e abbia i provilegi per accedere a questa pagina(cliente registrato/admin)
+if((!(isset($_SESSION['loggedIn'])))||($_SESSION['loggedIn'] != 'youAreLogged'))
+	header("Location: index.php?errore=noadmin");
+	
+// Compongo le query a seconda che l'utente che ha richiesto la pagina sia un cliente o un admin
+if($_SESSION['gruppo_U']==1){ // Solo un admin puo' vedere gli ordini di tutti
+	$queryCount = "SELECT COUNT(*) FROM ORDINI";
+	$query = "SELECT idOrdine, idInternoOrdine, annoOrdine, dataOrdine, importoOrdine, clienteOrdine, nomeCliente, cognomeCliente, statoOrdine, isPagatoOrdine, isChiusoOrdine, pagamentoAssOrdine, spedizioneAssOrdine, adminAssOrdine FROM ORDINI INNER JOIN CLIENTI ON idCliente = clienteOrdine LIMIT ?,?;";
+}else{ // un cliente visualizza solo i suoi ordini
+	$queryCount = "SELECT COUNT(*) FROM ORDINI WHERE clienteOrdine=".$_SESSION['id_U'].";";
+	$query = "SELECT idOrdine, idInternoOrdine, annoOrdine, dataOrdine, importoOrdine, clienteOrdine, nomeCliente, cognomeCliente, statoOrdine, isPagatoOrdine, isChiusoOrdine, pagamentoAssOrdine, spedizioneAssOrdine, adminAssOrdine FROM ORDINI INNER JOIN CLIENTI ON idCliente = clienteOrdine WHERE clienteOrdine=".$_SESSION['id_U']." LIMIT ?,?;";
+}
+
+// Controllo non sia stato richiesto il delete di un ordine
+if(isset($_GET['delete'])){
+	
+	// verifico che l'ordine indicato possa essere calcellato(solo se e' nello stato iniziale di registrato)
+	try{
+		//Seleziono gli admin
+		if (!($stmt = $mysqli->prepare("SELECT statoOrdine FROM ORDINI WHERE idOrdine=?")))
+			throw new Exception ('SELECT fallita: (' . $mysqli->errno . ') ' . $mysqli->error);   
+				
+		if (!($stmt->bind_param("i", $_GET['delete'])))// l'id del cliente da cancellare
+			throw new Exception ('bind_param fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+	
+		if (!($stmt->execute()))
+			throw new Exception ('execute fallita: (' . $mysqli->errno . ') ' . $mysqli->error);		  
+				 
+		if (!($stmt->bind_result($statoOrdineCanc)))
+			throw new Exception ('bind_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+	
+	 	if (!($stmt->fetch()))
+			throw new Exception ('fetch fallita: (' . $mysqli->errno . ') ' . $mysqli->error);  
+		
+		if (!($stmt->close()))   
+			throw new Exception ('chiusura oggetto risultato fallito: (' . $mysqli->errno . ') ' . $mysqli->error);
+
+	}catch (Exception $excp) {
+    	echo $excp -> getMessage();
+	}
+	
+	if(($statoOrdineCanc == "Registrato")||$ordiniSempreCancellabili){
+	
+		if(!validateID("delete", "ID prodotto da aggiornare", false, $avvisi))
+			$isAvvisi = true;
+		
+		if(!$isAvvisi){
+   			try{
+	 			//Determino il numero totale di utenti salvati nel programma
+				if (!($stmt = $mysqli->prepare("CALL delOrdine(?);")))
+					throw new Exception ('CALL fallita: (' . $mysqli->errno . ') ' . $mysqli->error);   
+				   
+				if (!($stmt->bind_param("i", $_GET['delete'])))// l'id del cliente da cancellare
+					throw new Exception ('bind_param fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+	
+				if (!($stmt->execute())) 
+					throw new Exception ('execute fallito: (' . $mysqli->errno . ') ' . $mysqli->error); 
+			
+				if (!($stmt->close()))   
+					throw new Exception ('chiusura oggetto risultato fallito: (' . $mysqli->errno . ') ' . $mysqli->error);
+
+			}catch (Exception $excp) {
+   				echo $excp -> getMessage();
+			}
+		
+			$isAvvisi = TRUE;
+			$avvisi = "Cancellazione dell'ordine riuscita!";
+		}
+	}else{
+		$isAvvisi = TRUE;
+		$avvisi = "Non e' piu' possibile cancellare l'ordine in questa fase!";
+	}
+}
+
+// E' stata richiesta una modifica di stato dell'ordine a pagato
+if(isset($_POST['setPagato'])){
+		
+	if(!validateText("metodoPagamentoOrd", "metodo di pagamento", 3, false, $avvisi))
+		$isAvvisi = true;
+		
+	if(!validateID("idOrdineMod", "ID ordine", false, $avvisi))
+		$isAvvisi = true;
+	
+	if(!$isAvvisi){
+		
+		try{
+			if (!($stmt = $mysqli->prepare("CALL AddPagamento(?,?, @esito, @tipoErrore);")))
+				throw new Exception ('CALL fallita: (' . $mysqli->errno . ') ' . $mysqli->error);   
+			   
+			if (!($stmt->bind_param("is", $_POST['idOrdineMod'], $_POST['metodoPagamentoOrd'])))
+				throw new Exception ('bind_param fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+		
+			if (!($stmt->execute()))
+				throw new Exception ('execute fallita: (' . $mysqli->errno . ') ' . $mysqli->error);	
+		
+			if (!($stmt = $mysqli->prepare("SELECT @esito, @tipoErrore;")))
+				throw new Exception ('prepare fallita: (' . $mysqli->errno . ') ' . $mysqli->error);  
+		
+			if (!($stmt->execute()))
+				throw new Exception ('execute fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+					 
+			if (!($stmt->bind_result($risultato, $tipoErrore)))
+				throw new Exception ('bind_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);  
+			
+			if (!($stmt->fetch()))
+				throw new Exception ('fetch fallita: (' . $mysqli->errno . ') ' . $mysqli->error);  
+			
+			if (!($stmt->close()))   
+				throw new Exception ('chiusura oggetto risultato fallito: (' . $mysqli->errno . ') ' . $mysqli->error);  
+	
+		}catch (Exception $excp) {
+    		echo $excp -> getMessage();
+		}
+		
+		if($risultato){
+			$avvisi .= "Aggiornamento ordine riuscito!";
+		}else{
+			$avvisi .= $TipoErrore;
+		}
+		
+		$isAvvisi = TRUE;
+
+	}
+}
+
+// E' stata richiesta una modifica di stato dell'ordine a in lavorazione
+if(isset($_POST['setInLav'])){
+		
+	if(!validateID("adminAssociato", "ID admin associato", false, $avvisi))
+		$isAvvisi = true;
+		
+	if(!validateID("idOrdineMod", "ID ordine", false, $avvisi))
+		$isAvvisi = true;
+	
+	if(!$isAvvisi){
+		
+		try{
+			if (!($stmt = $mysqli->prepare("UPDATE ORDINI SET statoOrdine='In lavorazione', adminAssOrdine=? WHERE idOrdine=?;")))
+				throw new Exception ('CALL fallita: (' . $mysqli->errno . ') ' . $mysqli->error);   
+			   
+			if (!($stmt->bind_param("ii", $_POST['adminAssociato'], $_POST['idOrdineMod'])))
+				throw new Exception ('bind_param fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+		
+			if (!($stmt->execute()))
+				throw new Exception ('execute fallita: (' . $mysqli->errno . ') ' . $mysqli->error);	
+			
+			if (!($stmt->close()))   
+				throw new Exception ('chiusura oggetto risultato fallito: (' . $mysqli->errno . ') ' . $mysqli->error);  
+	
+		}catch (Exception $excp) {
+    		echo $excp -> getMessage();
+		}
+		
+		
+		$avvisi .= "Aggiornamento ordine riuscito!";
+		$isAvvisi = TRUE;
+
+	}
+}
+
+
+// E' stata richiesta una modifica di stato dell'ordine a chiuso
+if(isset($_POST['setChiuso'])){
+		
+	if(!validateText("nomeVettore", "nome vettore", 3, false, $avvisi))
+		$isAvvisi = true;
+		
+	if(!validateText("tracking", "tracking spedizione", 3, false, $avvisi))
+		$isAvvisi = true;
+		
+	if(!validateID("idOrdineMod", "ID ordine", false, $avvisi))
+		$isAvvisi = true;
+	
+	if(!$isAvvisi){
+		
+		try{
+			if (!($stmt = $mysqli->prepare("CALL AddSpedizione(?,?,?, @esito, @tipoErrore);")))
+				throw new Exception ('CALL fallita: (' . $mysqli->errno . ') ' . $mysqli->error);   
+			   
+			if (!($stmt->bind_param("iss", $_POST['idOrdineMod'], $_POST['nomeVettore'], $_POST['tracking'])))
+				throw new Exception ('bind_param fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+		
+			if (!($stmt->execute()))
+				throw new Exception ('execute fallita: (' . $mysqli->errno . ') ' . $mysqli->error);	
+		
+			if (!($stmt = $mysqli->prepare("SELECT @esito, @tipoErrore;")))
+				throw new Exception ('prepare fallita: (' . $mysqli->errno . ') ' . $mysqli->error);  
+		
+			if (!($stmt->execute()))
+				throw new Exception ('execute fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+					 
+			if (!($stmt->bind_result($risultato, $tipoErrore)))
+				throw new Exception ('bind_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);  
+			
+			if (!($stmt->fetch()))
+				throw new Exception ('fetch fallita: (' . $mysqli->errno . ') ' . $mysqli->error);  
+			
+			if (!($stmt->close()))   
+				throw new Exception ('chiusura oggetto risultato fallito: (' . $mysqli->errno . ') ' . $mysqli->error);  
+	
+		}catch (Exception $excp) {
+    		echo $excp -> getMessage();
+		}
+		
+		if($risultato){
+			$avvisi .= "Aggiornamento ordine riuscito!";
+		}else{
+			$avvisi .= $TipoErrore;
+		}
+		
+		$isAvvisi = TRUE;
+
+	}
+}
+
+try{
+	//Determino il numero totale di ordini salvati nel programma
+	if (!($stmt = $mysqli->prepare($queryCount)))
+		throw new Exception ('SELECT COUNT(*) fallita: (' . $mysqli->errno . ') ' . $mysqli->error);   
+		
+	if (!($stmt->execute()))
+		throw new Exception ('execute fallita: (' . $mysqli->errno . ') ' . $mysqli->error);		  
+				 
+	if (!($stmt->bind_result($nOrdini)))
+		throw new Exception ('bind_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+			
+	if (!($stmt->fetch()))
+		throw new Exception ('fetch fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+			
+	if (!($stmt->close()))   
+		throw new Exception ('chiusura oggetto risultato fallito: (' . $mysqli->errno . ') ' . $mysqli->error);
+
+}catch (Exception $excp) {
+    echo $excp -> getMessage();
+}
+
+// Poiche' visualizzo gli ordini dettagliatamente, visualizzo un #ordini/pagina ridotto (configurabile da setup)
+$nMaxRighe = $nMaxRigheDettaglioOrdini;
+
+$page = calcolaPaginazione($nOrdini, $nMaxRighe, $nPages, $inizio, $quanti, $isAvvisi, $avvisi);
+
+// Creo l'input select per la scelta della pagina
+$selectBody = "";
+for($i=1; $i<=$nPages+1;$i++){
+	if($i == $page)
+		$selectBody .= "<option value='$i' selected>$i</option>";
+	else
+		$selectBody .= "<option value='$i'>$i</option>";
+}
+	
+try{
+	//Seleziono le informazioni degli ordini
+	if (!($stmt = $mysqli->prepare($query)))
+		throw new Exception ('SELECT fallita: (' . $mysqli->errno . ') ' . $mysqli->error); 
+		
+	if (!($stmt->bind_param("ii", $inizio, $quanti)))
+		throw new Exception ('bind_param fallita: (' . $mysqli->errno . ') ' . $mysqli->error);  
+		
+	if (!($stmt->execute()))
+		throw new Exception ('execute fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+		
+	if (!($stmt->store_result())) // Serve per poter eseguire una query annidata nel fetch di questa senza dover aprire una seconda connessione sul DB
+		throw new Exception ('store_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);		  
+				 
+	if (!($stmt->bind_result($idOrdine, $idInternoOrdine, $annoOrdine, $dataOrdine, $importoOrdine, $clienteOrdine, $nomeCliente, $cognomeCliente, $statoOrdine, $isPagatoOrdine, $isChiusoOrdine, $pagamentoAssOrdine, 
+	$spedizioneAssOrdine, $adminAssOrdine)))
+		throw new Exception ('bind_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+	
+	$tabellaOrdini = "";
+	if($nOrdini==0){ // Se la ricerca non ha prodotto risultati lo comunico
+		$tabellaOrdini .= "Nessun Ordine Trovato.";
+	}else{ //la ricerca ha prodotto risultati 
+		$tabellaOrdini .= "<table class='righeSelect' id='getOrdini'>";
+		$tabellaOrdini .= "<tr style='background-color: #d3d3d3;font-weight: bold;'><td align='center'><input type='checkbox' name='selAllCheck' id='selAllCheck' onClick='return CheckboxSeleziona_onclick(this, \"getOrdini\")' /></td><td>IdOrdine</td><td>Data Ordine</td><td>Importo</td><td>Cliente</td><td>Stato Ordine</td><td>Operazioni</td></tr>";
+		
+		$i = 0;
+		while($stmt->fetch()){
+			
+			formattaImporto($importoOrdine);	
+			// converto la data ordine nel formato italiano
+			$dataOrdineIT = dateToIT($dataOrdine); 
+			
+			$operazioniOrdine = "";
+			if($_SESSION['gruppo_U']==1){ // Solo un admin puo' cambiare lo stato di un ordine
+				$operazioniOrdine .= "[<a href='getOrdini.php?cambiaStato=$idOrdine' class='operazione'><img src='media/edit.png' width='16px' height='16px'/>cambia stato</a>] ";
+			}
+			if(($statoOrdine == "Registrato")||$ordiniSempreCancellabili){
+				$operazioniOrdine .= "[<a href='getOrdini.php?delete=$idOrdine' class='operazione'><img src='media/delete.png' width='16px' height='16px'/>del</a>]";
+			}else{
+				$operazioniOrdine .= "[<a class='operazione'>Ordine non cancellabile</a>]";
+			}
+			
+			// Leggo uno per uno tutti i prodotti che compongono l'ordine
+			if (!($stmt2 = $mysqli->prepare("SELECT nomeProdotto, prezzoProdotto, quantitaOP FROM ORDINIPRODOTTI INNER JOIN PRODOTTI ON prodottoOP=idProdotto WHERE ordineOP=?;")))
+				throw new Exception ('SELECT fallita: (' . $mysqli->errno . ') ' . $mysqli->error); 
+		
+			if (!($stmt2->bind_param("i", $idOrdine)))
+				throw new Exception ('bind_param fallita: (' . $mysqli->errno . ') ' . $mysqli->error);  
+		
+			if (!($stmt2->execute()))
+				throw new Exception ('execute fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+					
+			if (!($stmt2->store_result())) // Serve per poter eseguire una query annidata nel fetch di questa senza dover aprire una seconda connessione sul DB
+				throw new Exception ('store_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+				  
+			if (!($stmt2->bind_result($nomeProdotto, $prezzoProdotto, $quantitaOP)))
+				throw new Exception ('bind_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+			
+				
+			$listaProdottiOrdine = "<ul>";
+			while($stmt2->fetch()){
+				// sistemo il prezzo del prodotto
+				formattaImporto($prezzoProdotto);
+				
+				$listaProdottiOrdine .= "<li>$nomeProdotto ($prezzoProdotto x $quantitaOP)</li>";
+			}
+			$listaProdottiOrdine .= "</ul>";
+					
+			if (!($stmt2->close()))   
+				throw new Exception ('chiusura oggetto risultato fallito: (' . $mysqli->errno . ') ' . $mysqli->error);
+				
+			// Se l'ordine e' stato pagato, leggo i dati
+			if($isPagatoOrdine){
+				
+				if (!($stmt2 = $mysqli->prepare("SELECT tipoPagamento FROM PAGAMENTI WHERE idPagamento=?;")))
+					throw new Exception ('SELECT fallita: (' . $mysqli->errno . ') ' . $mysqli->error); 
+		
+				if (!($stmt2->bind_param("i", $pagamentoAssOrdine)))
+					throw new Exception ('bind_param fallita: (' . $mysqli->errno . ') ' . $mysqli->error);  
+		
+				if (!($stmt2->execute()))
+					throw new Exception ('execute fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+						
+				if (!($stmt2->store_result())) // Serve per poter eseguire una query annidata nel fetch di questa senza dover aprire una seconda connessione sul DB
+					throw new Exception ('store_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+				  
+				if (!($stmt2->bind_result($tipoPagamento)))
+					throw new Exception ('bind_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+					
+				if (!($stmt2->fetch()))
+					throw new Exception ('fetch fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+					
+				if (!($stmt2->close()))   
+					throw new Exception ('chiusura oggetto risultato fallito: (' . $mysqli->errno . ') ' . $mysqli->error);	
+			
+				$infoAssociate = "<img src='media/money.png' alt='pagamento' width='16px' height='16px' /> Pagamento: $tipoPagamento <br />";
+			}else
+				$infoAssociate = "<img src='media/money.png' alt='pagamento' width='16px' height='16px' /> Pagamento: Non Pagato <br />";
+			
+			if(($statoOrdine=="In lavorazione")||($statoOrdine=="Chiuso")){
+				
+				if (!($stmt2 = $mysqli->prepare("SELECT nomeAdmin FROM ADMIN WHERE idAdmin=?;")))
+					throw new Exception ('SELECT fallita: (' . $mysqli->errno . ') ' . $mysqli->error); 
+		
+				if (!($stmt2->bind_param("i", $adminAssOrdine)))
+					throw new Exception ('bind_param fallita: (' . $mysqli->errno . ') ' . $mysqli->error);  
+		
+				if (!($stmt2->execute()))
+					throw new Exception ('execute fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+						
+				if (!($stmt2->store_result())) // Serve per poter eseguire una query annidata nel fetch di questa senza dover aprire una seconda connessione sul DB
+					throw new Exception ('store_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+				  
+				if (!($stmt2->bind_result($nomeAdmin)))
+					throw new Exception ('bind_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+					
+				if (!($stmt2->fetch()))
+					throw new Exception ('fetch fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+					
+				if (!($stmt2->close()))   
+					throw new Exception ('chiusura oggetto risultato fallito: (' . $mysqli->errno . ') ' . $mysqli->error);	
+					
+				$infoAssociate .= "<img src='media/staff.png' alt='referente' width='16px' height='16px' /> Referente: $nomeAdmin <br />";
+				
+			}else
+				$infoAssociate .= "<img src='media/staff.png' alt='referente' width='16px' height='16px' /> Referente: Non Assegnato <br />";
+			
+			// Se l'ordine e' stato chiuso, leggo i dati relativi la spedizione
+			if($isChiusoOrdine){
+				if (!($stmt2 = $mysqli->prepare("SELECT vettoreSpedizione, trackingSpedizione FROM SPEDIZIONI WHERE idSpedizione=?;")))
+					throw new Exception ('SELECT fallita: (' . $mysqli->errno . ') ' . $mysqli->error); 
+		
+				if (!($stmt2->bind_param("i", $spedizioneAssOrdine)))
+					throw new Exception ('bind_param fallita: (' . $mysqli->errno . ') ' . $mysqli->error);  
+		
+				if (!($stmt2->execute()))
+					throw new Exception ('execute fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+						
+				if (!($stmt2->store_result())) // Serve per poter eseguire una query annidata nel fetch di questa senza dover aprire una seconda connessione sul DB
+					throw new Exception ('store_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+				  
+				if (!($stmt2->bind_result($vettoreSpedizione, $trackingSpedizione)))
+					throw new Exception ('bind_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+					
+				if (!($stmt2->fetch()))
+					throw new Exception ('fetch fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+					
+				if (!($stmt2->close()))   
+					throw new Exception ('chiusura oggetto risultato fallito: (' . $mysqli->errno . ') ' . $mysqli->error);	
+					
+				$infoAssociate .= "<img src='media/ship.png' alt='spedizione' width='16px' height='16px' /> Spedizione: $vettoreSpedizione($trackingSpedizione) ";
+			
+			}else
+				$infoAssociate .= "<img src='media/ship.png' alt='spedizione' width='16px' height='16px' /> Spedizione: Non Spedito ";
+			 
+			if($i%2==1){
+				$schedaOrdine = "<tr><td colspan='7' class='unpair'><div class='listaProdotti'>$listaProdottiOrdine</div><div class='infoOrd'>$infoAssociate</div></td></tr>";
+			}else{
+				$schedaOrdine = "<tr><td colspan='7' class='pair'><div class='listaProdotti'>$listaProdottiOrdine</div><div class='infoOrd'>$infoAssociate</div></td></tr>";
+			}
+					
+			if($i%2==1){
+				$tabellaOrdini .= "<tr class='unpair' onMouseOver='setColor(this, 0, \"#cc6600\")' onMouseOut='setColor(this, 1, \"#282828\")'><td align='center'><input type='checkbox' name='$idOrdine' id='$idOrdine' onclick='select_row(this);' /></td><td>#$idInternoOrdine-$annoOrdine</td><td>$dataOrdineIT</td><td>$importoOrdine</td><td>$nomeCliente $cognomeCliente</td><td>$statoOrdine</td><td>$operazioniOrdine</td></tr>
+				$schedaOrdine";
+			}else{
+				$tabellaOrdini .= "<tr class='pair' onMouseOver='setColor(this, 0, \"#cc6600\")' onMouseOut='setColor(this, 1, \"#282828\")'><td align='center'><input type='checkbox' name='$idOrdine' id='$idOrdine' onclick='select_row(this);' /></td><td>#$idInternoOrdine-$annoOrdine</td><td>$dataOrdineIT</td><td>$importoOrdine</td><td>$nomeCliente $cognomeCliente</td><td>$statoOrdine</td><td>$operazioniOrdine</td></tr>
+				$schedaOrdine";
+			}//else-if
+			$i++;
+		}//while    
+		$tabellaOrdini .= "<tr><td colspan='8'>Numero record visualizzati: $quanti/$nOrdini</td></tr>";
+		$tabellaOrdini .= "<tr><td colspan='8'><form method='GET' ACTION='getOrdini.php'>Vai alla pagina: <select name='pagina'>$selectBody</select><input type='submit' value='Vai'></form></td></tr>";
+		$tabellaOrdini .= "</table>";
+	}//else-if	
+			
+	if (!($stmt->close()))   
+		throw new Exception ('chiusura oggetto risultato fallito: (' . $mysqli->errno . ') ' . $mysqli->error);
+
+}catch (Exception $excp) {
+    echo $excp -> getMessage();
+}
+
+// Se la pagina e' stata richiesta dal link di Logout, eseguo il logout dell'utente connesso
+if(isset($_GET['logout']) && $_GET['logout']==true){
+	session_destroy();
+	
+	header("Location: ".$_SERVER['PHP_SELF']);  // valido per tutte le pagine: posso fare copia incolla :)
+}
+?>
+
+
+<html>
+<head>
+<meta charset="UTF-8">
+<title>The CakeLab - Visualizza Ordini</title>
+<link href="main.css" rel="stylesheet" type="text/css">
+
+<script type="text/javascript" src="pack/js/setColor.js"></script>
+<script type="text/javascript" src="pack/js/select_row.js"></script>
+<script type="text/javascript" src="pack/js/CheckboxSeleziona_onclick.js"></script>
+   
+</head>
+<body>
+<div id="top">
+	<div id="CakeLabLogo"><img src="media/logo.png" width="220px" height="86" alt="CakeLab Logo" /></div>
+	<div id="menuTop">
+    	<div id="home" class="pulsanteTop"><a href="index.php">Home</a></div>
+        <?php
+        if(!(isset($_SESSION['loggedIn']))){ // Se non e' loggato nessun utente permetto ad un eventuale cliente di registrarsi
+		?>
+    	<div id="nuovoUtente" class="pulsanteTop"><a href="addCliente.php">Sono Nuovo</a></div>
+        <?php
+		}else if(($_SESSION['loggedIn'] == 'youAreLogged')&&($_SESSION['gruppo_U']==1)){ // se invece e' loggato un admin gli permetto di creare un nuovo utente, ma con parole diverse :)
+		?>
+        <div id="nuovoUtente" class="pulsanteTop"><a href="addCliente.php">Nuovo Cliente</a></div>
+        <?php	
+		} // chiusura if-else nessun utente loggato/loggato un admin
+		
+		if((isset($_SESSION['loggedIn']))&&($_SESSION['loggedIn'] == 'youAreLogged')&&($_SESSION['gruppo_U']==1)){ // E' loggato un admin: solo un admin puo' aggiungere altri admin
+		?>
+        <div id="nuovoAdmin" class="pulsanteTop"><a href="addAdmin.php">Nuovo Admin</a></div>
+        <?php
+		}
+		?>
+    </div>
+	<div id="login">
+    	<?php
+		if((isset($_SESSION['loggedIn']))&&($_SESSION['loggedIn'] == 'youAreLogged')) // L'utente è gia' loggato
+		{
+				
+		?>
+        <div id="loggedBox">Benvenuto <span class="dato"><?php echo $_SESSION['nome_U'];?></span>(<a class="pulsanteLoggedBox" href="index.php?logout=true">Logout</a>) <hr />
+            <div id="iltuoCakeLab">
+        	<?php
+			if($_SESSION['gruppo_U']==1){ // L'utente loggato e' un admin
+			?>
+            	<a class="pulsanteLoggedBox" href="getUtenti.php">Gestisci Utenti</a>
+            <?php
+			}else{  // L'utente loggato e' un cliente
+			?>
+        		<a class="pulsanteLoggedBox" href="getOrdini.php">I tuoi ordini</a>
+            <?php
+            }// chiusura if-else utente loggato admin/cliente
+        	?>
+            </div>
+        	<div id="carrello">
+            <?php
+			if($_SESSION['gruppo_U']==1){ // L'utente loggato e' un admin
+			?>
+        		<a class="pulsanteLoggedBox" href="getOrdini.php">Gestisci Ordini</a>
+        	<?php
+			}else{  // L'utente loggato e' un cliente
+			?>
+            	<img width="16px" height="16px" src="media/carrello.gif" alt="un piccolo carrello" /><a class="pulsanteLoggedBox" href="getCarrello.php">Carrello</a>   	
+            <?php
+            }// chiusura if-else utente loggato admin/cliente
+        	?>
+            </div>
+        </div>
+        <?php
+			}else{  // L'utente non e' loggato
+		?>
+         
+   				<form method="POST" action="<?php echo $_SERVER['PHP_SELF']; /*L'invio del form sara' processato da questa stessa pagina*/?>">
+    				<div id="logTextFields">
+  						Username: <input type="text" name="user" size="15" /><br />
+ 						Password:&nbsp; <input type="password" name="pwd" size="15" /><br />
+                        <?php
+							if($erroreLogin){
+						?>
+                        		<div class="errore"><?php echo $descErrore;?></div>
+                        <?php
+							}// errore campi login mancanti
+						?>
+ 					</div>
+     				<div id="logPulsante">
+   						<input type="submit" name="Login" value="Login" />
+  					</div>
+				</form>
+                
+    
+   		 
+    
+  	    <?php	
+			}// chiusura if-else utente loggato/non loggato
+		?>
+    </div>
+</div>
+<div id="center">
+<!-- CONTENUTO VARIABILE -->
+<?php   // Se la pagina e' stata richiamata a seguito dell'invio del form di creazione utente visualizzo il messaggio con risultato
+if($isAvvisi){
+?>
+<div class="risultato">
+<?php echo $avvisi;?>
+</div>
+<?php
+}
+?>
+
+<?php
+	if(isset($_GET['cambiaStato'])){ // E' stata fatta una richiesta di cambiamento stato per un ordine
+	
+		// Prelevo i dati sull'ordine da modificare
+		try{
+			//Seleziono gli admin
+			if (!($stmt = $mysqli->prepare("SELECT statoOrdine FROM ORDINI WHERE idOrdine=?")))
+				throw new Exception ('SELECT fallita: (' . $mysqli->errno . ') ' . $mysqli->error);   
+				
+			if (!($stmt->bind_param("i", $_GET['cambiaStato'])))// l'id del cliente da cancellare
+				throw new Exception ('bind_param fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+	
+			if (!($stmt->execute()))
+				throw new Exception ('execute fallita: (' . $mysqli->errno . ') ' . $mysqli->error);		  
+				 
+			if (!($stmt->bind_result($statoOrdineMod)))
+				throw new Exception ('bind_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+	
+	 		if (!($stmt->fetch()))
+				throw new Exception ('fetch fallita: (' . $mysqli->errno . ') ' . $mysqli->error);  
+		
+			if (!($stmt->close()))   
+				throw new Exception ('chiusura oggetto risultato fallito: (' . $mysqli->errno . ') ' . $mysqli->error);
+
+		}catch (Exception $excp) {
+    		echo $excp -> getMessage();
+		}
+		if($statoOrdineMod=="Registrato"){
+?>
+	
+        <form method="POST" action="<?php echo $_SERVER['PHP_SELF']; /*L'invio del form sara' processato da questa stessa pagina*/?>">
+		<fieldset><legend>Info relative al pagamento</legend>
+        <select name="metodoPagamentoOrd"><option value="Bonifico Bancario">Bonifico Bancario</option><option value="Paypal">PayPal</option>
+        <option value="Carta di Credito">Carta di Credito</option><option value="Postagiro">Postagiro</option>
+        </select>
+        <input type="hidden" name="idOrdineMod" value= "<?php echo $_GET['cambiaStato'];?>">
+        <input type="submit" id = 'setPagato' name="setPagato" value="Imposta come Pagato">
+        </fieldset>
+        </form> 
+    
+<?php
+		}else if($statoOrdineMod=="Pagato"){
+			try{
+				//Seleziono gli admin
+				if (!($stmt = $mysqli->prepare("SELECT idAdmin, userAdmin FROM ADMIN")))
+					throw new Exception ('SELECT fallita: (' . $mysqli->errno . ') ' . $mysqli->error);   
+		
+				if (!($stmt->execute()))
+					throw new Exception ('execute fallita: (' . $mysqli->errno . ') ' . $mysqli->error);		  
+				 
+				if (!($stmt->bind_result($idAdmin, $userAdmin)))
+					throw new Exception ('bind_result fallita: (' . $mysqli->errno . ') ' . $mysqli->error);
+	
+	 			$selectAdmin = "<select name='adminAssociato'>";		
+				while($stmt->fetch()){
+					$selectAdmin .=  "<option value='$idAdmin'>$userAdmin</option>";	
+				}
+				$selectAdmin .= "</select>";
+			
+				if (!($stmt->close()))   
+					throw new Exception ('chiusura oggetto risultato fallito: (' . $mysqli->errno . ') ' . $mysqli->error);
+
+			}catch (Exception $excp) {
+    			echo $excp -> getMessage();
+			}		
+?>
+
+	<form method="POST" action="<?php echo $_SERVER['PHP_SELF']; /*L'invio del form sara' processato da questa stessa pagina*/?>">
+	<fieldset><legend>Info relative al referente interno</legend>
+    <?php echo $selectAdmin;?>
+    <input type="hidden" name="idOrdineMod" value= "<?php echo $_GET['cambiaStato'];?>">
+    <input type="submit" id = 'setInLav' name="setInLav" value="Imposta come In Lavorazione">
+    </fieldset>
+    </form> 
+<?php
+		}else if($statoOrdineMod=="In lavorazione"){
+?>
+	<form method="POST" action="<?php echo $_SERVER['PHP_SELF']; /*L'invio del form sara' processato da questa stessa pagina*/?>">
+	<fieldset><legend>Info relative al vettore</legend>
+    Nome vettore: <input type="text" name="nomeVettore">Tracking Spedizione:<input type="text" name="tracking">
+    <input type="hidden" name="idOrdineMod" value= "<?php echo $_GET['cambiaStato'];?>">
+    <input type="submit" id = 'setChiuso' name="setChiuso" value="Imposta come Chiuso">
+    </fieldset>
+    </form> 
+
+<?php	
+		}
+	}// fine richiesta cambiamento stato
+	
+	// Interazione col DB terminata. Chiudo la connessione
+	$mysqli->close();
+?>
+
+<div class="visualizza">
+<?php
+	echo $tabellaOrdini;
+?>
+</div>
+</div> <!-- Chiusura div id='center' -->
+</body>
+</html>
