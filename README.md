@@ -1,2 +1,3 @@
 # CakeLab
-Cake e-commerce. Univerity Data Base project.
+Cake e-commerce. 
+University Data Base project.
